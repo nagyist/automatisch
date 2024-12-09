@@ -31,6 +31,8 @@ import AppIcon from 'components/AppIcon';
 import Container from 'components/Container';
 import PageTitle from 'components/PageTitle';
 import useApp from 'hooks/useApp';
+import useAppAuthClients from 'hooks/useAppAuthClients';
+import useSupportAuthClient from 'hooks/useSupportAuthClients';
 import Can from 'components/Can';
 import { AppPropType } from 'propTypes/propTypes';
 
@@ -64,6 +66,9 @@ export default function Application() {
   const [searchParams] = useSearchParams();
   const { appKey } = useParams();
   const navigate = useNavigate();
+  const { data: appAuthClients } = useAppAuthClients(appKey);
+
+  const supportAuthClients = useSupportAuthClient();
 
   const { data, loading } = useApp(appKey);
   const app = data?.data || {};
@@ -71,37 +76,46 @@ export default function Application() {
   const { data: appConfig } = useAppConfig(appKey);
   const connectionId = searchParams.get('connectionId') || undefined;
 
+  console.log(`supportAuthClients = ${supportAuthClients}`);
+
   const currentUserAbility = useCurrentUserAbility();
 
   const goToApplicationPage = () => navigate('connections');
 
   const connectionOptions = React.useMemo(() => {
-    const shouldHaveCustomConnection =
-      appConfig?.data?.connectionAllowed &&
-      appConfig?.data?.customConnectionAllowed;
+    const addCustomConnection = {
+      label: formatMessage('app.addConnection'),
+      key: 'addConnection',
+      'data-test': 'add-connection-button',
+      to: URLS.APP_ADD_CONNECTION(appKey, false),
+      disabled: !currentUserAbility.can('create', 'Connection'),
+    };
 
-    const options = [
-      {
-        label: formatMessage('app.addConnection'),
-        key: 'addConnection',
-        'data-test': 'add-connection-button',
-        to: URLS.APP_ADD_CONNECTION(appKey, appConfig?.data?.connectionAllowed),
-        disabled: !currentUserAbility.can('create', 'Connection'),
-      },
-    ];
+    const addConnectionWithAuthClient = {
+      label: formatMessage('app.addConnectionWithAuthClient'),
+      key: 'addConnectionWithAuthClient',
+      'data-test': 'add-custom-connection-button',
+      to: URLS.APP_ADD_CONNECTION(appKey, true),
+      disabled: !currentUserAbility.can('create', 'Connection'),
+    };
 
-    if (shouldHaveCustomConnection) {
-      options.push({
-        label: formatMessage('app.addCustomConnection'),
-        key: 'addCustomConnection',
-        'data-test': 'add-custom-connection-button',
-        to: URLS.APP_ADD_CONNECTION(appKey),
-        disabled: !currentUserAbility.can('create', 'Connection'),
-      });
+    // means there is no app config. defaulting to custom connections only
+    if (!appConfig?.data) {
+      return [addCustomConnection];
     }
 
-    return options;
-  }, [appKey, appConfig?.data, currentUserAbility, formatMessage]);
+    // means there is no app auth client. so we don't show the `addConnectionWithAuthClient`
+    if (appAuthClients?.data?.length === 0) {
+      return [addCustomConnection];
+    }
+
+    // means only auth clients are allowed for connection creation
+    if (appConfig?.data?.useOnlyPredefinedAuthClients === true) {
+      return [addConnectionWithAuthClient];
+    }
+
+    return [addCustomConnection, addConnectionWithAuthClient];
+  }, [appKey, appConfig, appAuthClients, currentUserAbility, formatMessage]);
 
   if (loading) return null;
 
@@ -154,12 +168,7 @@ export default function Application() {
                       {(allowed) => (
                         <SplitButton
                           disabled={
-                            !allowed ||
-                            (appConfig?.data &&
-                              !appConfig?.data?.disabled &&
-                              !appConfig?.data?.connectionAllowed &&
-                              !appConfig?.data?.customConnectionAllowed) ||
-                            connectionOptions.every(({ disabled }) => disabled)
+                            !allowed || appConfig?.data?.disabled === true
                           }
                           options={connectionOptions}
                         />

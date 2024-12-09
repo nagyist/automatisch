@@ -38,6 +38,14 @@ function AddAppConnection(props) {
     appAuthClientId,
     useShared: !!appAuthClientId,
   });
+  console.log(
+    'info',
+    key,
+    connectionId,
+    appAuthClientId,
+    !!appAuthClientId,
+    authenticate,
+  );
   const queryClient = useQueryClient();
 
   React.useEffect(function relayProviderData() {
